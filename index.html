@@ -1,13 +1,393 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>CHINOKABE — Beat the Wall</title>
-  <link rel="stylesheet" href="/src/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>CHINOKABE — Beat the Wall</title>
+<style>
+  :root { --accent:#00e5ff; --good:#33ff99; --bad:#ff3366; --bg:#05060f; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:var(--bg); color:#fff;
+    font-family:"Segoe UI",system-ui,sans-serif; overflow:hidden; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #stage { position:relative; width:100%; height:100%; }
+  video { display:none; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+  /* HUD */
+  #hud { position:absolute; inset:0; pointer-events:none; }
+  .topbar { position:absolute; top:14px; left:0; right:0; display:flex;
+    justify-content:space-between; padding:0 22px; font-weight:800; }
+  .stat { text-shadow:0 2px 12px #000; }
+  .stat small { display:block; font-size:11px; letter-spacing:2px; opacity:.6; font-weight:600; }
+  .stat b { font-size:30px; color:var(--accent); }
+  #combo b { color:#ffd23f; }
+  #poseName { position:absolute; top:74px; left:0; right:0; text-align:center;
+    font-size:26px; font-weight:800; letter-spacing:3px; text-shadow:0 2px 14px #000; opacity:.9; }
+
+  /* live match meter */
+  #meterWrap { position:absolute; bottom:34px; left:50%; transform:translateX(-50%);
+    width:min(72%,520px); }
+  #meterTrack { height:16px; border-radius:10px; background:rgba(255,255,255,.12);
+    overflow:hidden; box-shadow:0 0 0 2px rgba(255,255,255,.15) inset; }
+  #meterFill { height:100%; width:0%; border-radius:10px; transition:width .08s linear;
+    background:linear-gradient(90deg,var(--bad),#ffd23f,var(--good)); }
+  #meterLabel { text-align:center; margin-top:6px; font-weight:700; letter-spacing:2px;
+    font-size:14px; text-shadow:0 2px 8px #000; }
+
+  /* verdict flash */
+  #verdict { position:absolute; top:42%; left:0; right:0; text-align:center;
+    font-size:92px; font-weight:900; letter-spacing:4px; opacity:0;
+    transform:scale(.6); transition:opacity .12s, transform .12s; text-shadow:0 6px 30px #000; }
+  #verdict.show { opacity:1; transform:scale(1); }
+
+  /* beat dot */
+  #beat { position:absolute; top:18px; left:50%; transform:translateX(-50%);
+    width:14px; height:14px; border-radius:50%; background:#fff; opacity:.25; }
+
+  /* start / menu */
+  #menu { position:absolute; inset:0; background:radial-gradient(circle at 50% 35%,#101637,#05060f 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; pointer-events:auto; text-align:center; padding:24px; }
+  #menu h1 { font-size:clamp(40px,9vw,84px); letter-spacing:6px; font-weight:900;
+    background:linear-gradient(90deg,var(--accent),#a855f7,#ffd23f);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #menu p { max-width:520px; opacity:.8; line-height:1.5; font-size:15px; }
+  .controls { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:center;
+    margin-top:6px; }
+  .ctl { display:flex; flex-direction:column; gap:4px; font-size:12px; letter-spacing:1px; opacity:.85; }
+  input[type=range]{ width:150px; }
+  button { pointer-events:auto; cursor:pointer; border:none; border-radius:40px;
+    padding:16px 42px; font-size:20px; font-weight:800; letter-spacing:2px; color:#05060f;
+    background:linear-gradient(90deg,var(--accent),#7cf); box-shadow:0 8px 30px rgba(0,229,255,.4); }
+  button:active { transform:translateY(2px); }
+  .file { font-size:12px; opacity:.7; }
+  #status { font-size:13px; opacity:.7; min-height:18px; }
+  #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+  .hidden { display:none !important; }
+</style>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="/src/main.ts"></script>
+<div id="wrap"><div id="stage">
+  <video id="cam" playsinline muted></video>
+  <canvas id="view"></canvas>
+  <div id="flash"></div>
+
+  <div id="hud" class="hidden">
+    <div id="beat"></div>
+    <div class="topbar">
+      <div class="stat" id="score"><small>SCORE</small><b>0</b></div>
+      <div class="stat" id="combo"><small>COMBO</small><b>0</b></div>
+      <div class="stat" id="hits"><small>FITS</small><b>0/0</b></div>
+    </div>
+    <div id="poseName">GET READY</div>
+    <div id="verdict"></div>
+    <div id="meterWrap">
+      <div id="meterTrack"><div id="meterFill"></div></div>
+      <div id="meterLabel">JUDGE: —</div>
+    </div>
+  </div>
+
+  <div id="menu">
+    <h1>CHINOKABE</h1>
+    <p>The wall is coming. Strike the pose before it hits the beat.
+       Stand back so your whole upper body is in frame. The AI judges your fit.</p>
+    <div class="controls">
+      <label class="ctl">TEMPO <span id="bpmVal">95 BPM</span>
+        <input type="range" id="bpm" min="60" max="140" value="95" /></label>
+      <label class="ctl">BEATS / POSE <span id="holdVal">4</span>
+        <input type="range" id="hold" min="2" max="6" value="4" /></label>
+    </div>
+    <button id="startBtn">START</button>
+    <label class="file">▸ optional: play your own track
+      <input type="file" id="music" accept="audio/*" /></label>
+    <div id="status">Loading AI pose model…</div>
+  </div>
+</div></div>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/vision_bundle.mjs";
+
+/* ---------- elements ---------- */
+const cam = document.getElementById('cam');
+const view = document.getElementById('view');
+const ctx = view.getContext('2d');
+const menu = document.getElementById('menu');
+const hud = document.getElementById('hud');
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const flash = document.getElementById('flash');
+const beatDot = document.getElementById('beat');
+const verdictEl = document.getElementById('verdict');
+const meterFill = document.getElementById('meterFill');
+const meterLabel = document.getElementById('meterLabel');
+const poseNameEl = document.getElementById('poseName');
+const scoreB = document.querySelector('#score b');
+const comboB = document.querySelector('#combo b');
+const hitsB = document.querySelector('#hits b');
+const bpmSlider = document.getElementById('bpm');
+const holdSlider = document.getElementById('hold');
+const bpmVal = document.getElementById('bpmVal');
+const holdVal = document.getElementById('holdVal');
+const musicInput = document.getElementById('music');
+
+bpmSlider.oninput = () => bpmVal.textContent = bpmSlider.value + ' BPM';
+holdSlider.oninput = () => holdVal.textContent = holdSlider.value;
+
+/* ---------- pose templates (UPPER BODY only) ----------
+   Units = shoulder width. Origin = midpoint of shoulders. +x right, -y up.
+   Each shoulder sits at x=±0.5,y=0. shoulder→elbow ≈0.75, shoulder→wrist ≈1.5.
+   Only elbows/wrists vary; shoulders/head/waist stub are fixed below. */
+const FIX = {
+  ls:[-0.5,0], rs:[0.5,0], head:[0,-0.95],
+  hl:[-0.32,1.35], hr:[0.32,1.35]   // short torso stub for the wall silhouette
+};
+const POSES = [
+  { name:'T-POSE',     le:[-1.25,0],    re:[1.25,0],    lw:[-2.0,0],     rw:[2.0,0] },
+  { name:'HANDS UP',   le:[-0.5,-0.75], re:[0.5,-0.75], lw:[-0.5,-1.5],  rw:[0.5,-1.5] },
+  { name:'VICTORY V',  le:[-1.03,-0.53],re:[1.03,-0.53],lw:[-1.56,-1.06],rw:[1.56,-1.06] },
+  { name:'CACTUS',     le:[-1.25,0],    re:[1.25,0],    lw:[-1.25,-0.75],rw:[1.25,-0.75] },
+  { name:'ARMS DOWN',  le:[-0.72,0.72], re:[0.72,0.72], lw:[-0.94,1.44], rw:[0.94,1.44] },
+  { name:'DIAGONAL ↗', le:[-1.02,0.53], re:[1.03,-0.53],lw:[-1.55,1.06], rw:[1.56,-1.06] },
+  { name:'DIAGONAL ↖', le:[-1.03,-0.53],re:[1.02,0.53], lw:[-1.56,-1.06],rw:[1.55,1.06] },
+];
+
+/* ---------- pose landmarker ---------- */
+let landmarker = null;
+(async () => {
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm");
+    landmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions:{ modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+        delegate:"GPU" },
+      runningMode:"VIDEO", numPoses:1
+    });
+    statusEl.textContent = "AI ready ✓  — press START";
+    startBtn.disabled = false;
+  } catch(e){
+    statusEl.textContent = "Model load failed (need internet). " + e.message;
+  }
+})();
+
+/* ---------- camera ---------- */
+async function startCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:'user', width:{ideal:1280}, height:{ideal:720} }, audio:false });
+  cam.srcObject = stream;
+  await cam.play();
+}
+
+/* ---------- audio: synth beat + optional track ---------- */
+let actx, masterGain, songBuffer=null, songSource=null;
+function initAudio(){
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  masterGain = actx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(actx.destination);
+}
+const SCALE=[0,3,5,7,10,12]; // minor pentatonic-ish bass
+function kick(t){ const o=actx.createOscillator(),g=actx.createGain();
+  o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(48,t+0.12);
+  g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+0.2); }
+function hat(t){ const len=0.03, b=actx.createBuffer(1,actx.sampleRate*len,actx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const s=actx.createBufferSource(); s.buffer=b; const g=actx.createGain(); g.gain.value=0.18;
+  const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
+  s.connect(f).connect(g).connect(masterGain); s.start(t); }
+function bass(t,beat){ const o=actx.createOscillator(),g=actx.createGain();
+  const semi=SCALE[(beat%8<4? [0,0,3,5][beat%4] : [5,3,0,0][beat%4])] ?? 0;
+  o.type='triangle'; o.frequency.value=55*Math.pow(2,semi/12);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.32);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+0.34); }
+function sfx(good){ const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime;
+  o.type='square'; o.frequency.setValueAtTime(good?440:200,t);
+  o.frequency.exponentialRampToValueAtTime(good?880:120,t+0.15);
+  g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+0.2); }
+
+musicInput.onchange = async () => {
+  const f = musicInput.files[0]; if(!f) return;
+  if(!actx) initAudio();
+  songBuffer = await actx.decodeAudioData(await f.arrayBuffer());
+  statusEl.textContent = "Track loaded ✓ — it plays under the beat";
+};
+
+/* ---------- game state ---------- */
+let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
+let lastBeat=-1, current=null, liveScore=0;
+let score=0, combo=0, fits=0, total=0;
+
+function spawnTarget(beat){
+  let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
+  current = { pose:p, startBeat:beat, judged:false };
+  poseNameEl.textContent = p.name;
+}
+// deterministic-ish rng seeded by time so we don't rely on Math.random ban concerns
+let seed = 1234567;
+function rand(){ seed = (seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }
+
+function onBeat(beat){
+  // audio
+  const t = actx.currentTime + 0.01;
+  kick(t); if(beat%2===1) hat(t); bass(t,beat);
+  beatDot.style.opacity=1; beatDot.style.transform='translateX(-50%) scale(1.6)';
+  setTimeout(()=>{ beatDot.style.opacity=.25; beatDot.style.transform='translateX(-50%) scale(1)'; },110);
+
+  if(!current){ if(beat>=2) spawnTarget(beat); return; }
+
+  // judge when the wall arrives
+  if(!current.judged && beat >= current.startBeat + holdBeats){
+    current.judged = true;
+    const pct = Math.round(liveScore*100);
+    const ok = liveScore >= 0.55;
+    total++;
+    if(ok){ fits++; combo++; score += 100 + Math.round(liveScore*100) + combo*10; }
+    else { combo=0; }
+    showVerdict(ok, pct);
+    sfx(ok);
+    scoreB.textContent=score; comboB.textContent=combo; hitsB.textContent=fits+'/'+total;
+    spawnTarget(beat); // next wall starts immediately on the beat
+  }
+}
+
+function showVerdict(ok,pct){
+  verdictEl.textContent = (ok?'FIT! ':'MISS ')+pct+'%';
+  verdictEl.style.color = ok? 'var(--good)':'var(--bad)';
+  verdictEl.classList.add('show');
+  flash.style.opacity = ok?0.5:0.25; flash.style.background = ok?'#33ff99':'#ff3366';
+  setTimeout(()=>{ verdictEl.classList.remove('show'); flash.style.opacity=0; }, 520);
+}
+
+/* ---------- matching (UPPER BODY: anchored to shoulders) ---------- */
+function shoulderFrame(lm,W,H){
+  const px=i=>[ (1-lm[i].x)*W, lm[i].y*H ]; // mirror x for selfie space
+  const vis=i=>lm[i].visibility ?? 1;
+  if(vis(11)<0.4 || vis(12)<0.4) return null; // only shoulders required
+  const ls=px(11),rs=px(12);
+  const sm=[(ls[0]+rs[0])/2,(ls[1]+rs[1])/2];
+  const scale=Math.hypot(ls[0]-rs[0],ls[1]-rs[1])||1; // shoulder width
+  const norm=i=>[ (px(i)[0]-sm[0])/scale, (px(i)[1]-sm[1])/scale ];
+  return { norm, vis, origin:sm, scale };
+}
+function dist(a,b){ return Math.hypot(a[0]-b[0],a[1]-b[1]); }
+function smoothCredit(d){ // shoulder-width units: 0→1, >=1.6→0
+  const t = Math.max(0, Math.min(1, (1.6-d)/1.2)); return t*t*(3-2*t);
+}
+function matchScore(frame,pose){
+  if(!frame) return 0;
+  // wrists weight 0.7, elbows 0.3 (left=15/13, right=16/14)
+  const lw=frame.norm(15), rw=frame.norm(16), le=frame.norm(13), re=frame.norm(14);
+  const sw = (smoothCredit(dist(lw,pose.lw)) + smoothCredit(dist(rw,pose.rw)))/2;
+  const se = (smoothCredit(dist(le,pose.le)) + smoothCredit(dist(re,pose.re)))/2;
+  return sw*0.7 + se*0.3;
+}
+
+/* ---------- rendering ---------- */
+function drawVideo(W,H){
+  ctx.save(); ctx.translate(W,0); ctx.scale(-1,1);
+  ctx.drawImage(cam,0,0,W,H); ctx.restore();
+  ctx.fillStyle='rgba(5,6,15,0.30)'; ctx.fillRect(0,0,W,H); // darken for contrast
+}
+function P(i,lm,W,H){ return [ (1-lm[i].x)*W, lm[i].y*H ]; }
+const BONES=[[11,13],[13,15],[12,14],[14,16],[11,12]]; // upper body only
+function drawPlayer(lm,W,H,col){
+  ctx.lineWidth=Math.max(4,W*0.006); ctx.strokeStyle=col; ctx.lineCap='round';
+  ctx.shadowColor=col; ctx.shadowBlur=14;
+  for(const [a,b] of BONES){ const pa=P(a,lm,W,H),pb=P(b,lm,W,H);
+    ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke(); }
+  ctx.shadowBlur=0;
+  for(const i of [15,16,13,14,11,12]){ const p=P(i,lm,W,H);
+    ctx.beginPath(); ctx.arc(p[0],p[1],W*0.012,0,7); ctx.fillStyle=col; ctx.fill(); }
+}
+// draw the incoming "wall" pose ghost (upper body only)
+function drawGhost(pose,approach,W,H,grade){
+  const cx=W/2, cy=H*0.46;
+  const scale = (H*0.20) * (0.45 + 0.55*approach); // 1 unit = shoulder width; grows as it nears
+  const alpha = 0.25 + 0.65*approach;
+  const sp=([x,y])=>[ cx + x*scale, cy + y*scale ];
+  const G={ ls:sp(FIX.ls),rs:sp(FIX.rs),head:sp(FIX.head),hl:sp(FIX.hl),hr:sp(FIX.hr),
+    le:sp(pose.le),re:sp(pose.re),lw:sp(pose.lw),rw:sp(pose.rw) };
+  const col = grade>=0.55 ? '#33ff99' : (grade>=0.3? '#ffd23f' : '#00e5ff');
+  ctx.save(); ctx.globalAlpha=alpha;
+  ctx.lineWidth=Math.max(8,scale*0.6); ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.strokeStyle=col; ctx.shadowColor=col; ctx.shadowBlur=24;
+  const link=(a,b)=>{ctx.beginPath();ctx.moveTo(G[a][0],G[a][1]);ctx.lineTo(G[b][0],G[b][1]);ctx.stroke();};
+  link('ls','rs');                       // shoulders
+  link('ls','hl'); link('rs','hr'); link('hl','hr'); // short torso
+  link('ls','le'); link('le','lw');      // left arm
+  link('rs','re'); link('re','rw');      // right arm
+  ctx.beginPath(); ctx.arc(G.head[0],G.head[1],scale*0.5,0,7); ctx.stroke(); // head
+  ctx.restore();
+}
+
+/* ---------- main loop ---------- */
+let lastVideoTime=-1;
+function loop(){
+  if(!running){ return; }
+  const W=view.width, H=view.height;
+  drawVideo(W,H);
+
+  let lm=null;
+  if(landmarker && cam.currentTime!==lastVideoTime){
+    lastVideoTime=cam.currentTime;
+    const res=landmarker.detectForVideo(cam, performance.now());
+    if(res.landmarks && res.landmarks[0]) lm=res.landmarks[0];
+  } else if(landmarker){
+    const res=landmarker.detectForVideo(cam, performance.now());
+    if(res.landmarks && res.landmarks[0]) lm=res.landmarks[0];
+  }
+
+  // beat clock
+  const beatF=(actx.currentTime-startTime)/secPerBeat;
+  const b=Math.floor(beatF);
+  while(b>lastBeat){ lastBeat++; onBeat(lastBeat); }
+
+  // score + draw
+  const frame = lm? shoulderFrame(lm,W,H):null;
+  if(current){ liveScore = matchScore(frame,current.pose);
+    const approach = Math.max(0,Math.min(1,(beatF-current.startBeat)/holdBeats));
+    drawGhost(current.pose, approach, W, H, liveScore);
+  }
+  if(lm){ const ok=liveScore>=0.55;
+    drawPlayer(lm,W,H, current? (ok?'#33ff99':(liveScore>=0.3?'#ffd23f':'#ff5d8f')):'#9ad'); }
+
+  // meter
+  const pct=Math.round(liveScore*100);
+  meterFill.style.width=pct+'%';
+  meterLabel.textContent = !lm? 'JUDGE: step into frame' : 'JUDGE: '+pct+'% fit';
+
+  requestAnimationFrame(loop);
+}
+
+/* ---------- boot ---------- */
+function resize(){ view.width=stageW(); view.height=stageH(); }
+function stageW(){ return view.clientWidth; }
+function stageH(){ return view.clientHeight; }
+window.addEventListener('resize', ()=>{ view.width=view.clientWidth; view.height=view.clientHeight; });
+
+startBtn.disabled = true;
+startBtn.onclick = async () => {
+  startBtn.disabled=true; statusEl.textContent="starting camera…";
+  try { await startCamera(); }
+  catch(e){ statusEl.textContent="Camera blocked: "+e.message+" (needs https or localhost)"; startBtn.disabled=false; return; }
+  if(!actx) initAudio(); else if(actx.state==='suspended') actx.resume();
+
+  view.width=view.clientWidth; view.height=view.clientHeight;
+  secPerBeat = 60/Number(bpmSlider.value);
+  holdBeats = Number(holdSlider.value);
+  score=0; combo=0; fits=0; total=0; lastBeat=-1; current=null; liveScore=0;
+  scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0/0';
+
+  menu.classList.add('hidden'); hud.classList.remove('hidden');
+  startTime = actx.currentTime + 0.15;
+  if(songBuffer){ songSource=actx.createBufferSource(); songSource.buffer=songBuffer;
+    songSource.loop=true; songSource.connect(masterGain); songSource.start(startTime); }
+  running=true;
+  requestAnimationFrame(loop);
+};
+</script>
 </body>
 </html>
