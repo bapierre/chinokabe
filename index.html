@@ -306,7 +306,7 @@ function sfx(good){ const o=actx.createOscillator(),g=actx.createGain(),t=actx.c
 let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
 let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0;
-const MAX_POSES=12; // fixed-length run so there's a score to record
+const MAX_POSES=10; // fixed-length run so there's a score to record
 
 function spawnTarget(beat){
   let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
