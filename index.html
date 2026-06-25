@@ -177,8 +177,6 @@
             <span class="row"><span>BEATS / POSE</span><span class="val" id="holdVal">4</span></span>
             <input type="range" id="hold" min="2" max="6" value="4" />
           </label>
-          <label class="file">Own track:
-            <input type="file" id="music" accept="audio/*" /></label>
           <div id="status">Loading AI pose model…</div>
         </section>
         <section class="panel">
@@ -227,7 +225,6 @@ const bpmSlider = document.getElementById('bpm');
 const holdSlider = document.getElementById('hold');
 const bpmVal = document.getElementById('bpmVal');
 const holdVal = document.getElementById('holdVal');
-const musicInput = document.getElementById('music');
 
 bpmSlider.oninput = () => bpmVal.textContent = bpmSlider.value + ' BPM';
 holdSlider.oninput = () => holdVal.textContent = holdSlider.value;
@@ -304,13 +301,6 @@ function sfx(good){ const o=actx.createOscillator(),g=actx.createGain(),t=actx.c
   o.frequency.exponentialRampToValueAtTime(good?880:120,t+0.15);
   g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2);
   o.connect(g).connect(masterGain); o.start(t); o.stop(t+0.2); }
-
-musicInput.onchange = async () => {
-  const f = musicInput.files[0]; if(!f) return;
-  if(!actx) initAudio();
-  songBuffer = await actx.decodeAudioData(await f.arrayBuffer());
-  statusEl.textContent = "Track loaded ✓ — it plays under the beat";
-};
 
 /* ---------- game state ---------- */
 let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
