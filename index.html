@@ -162,6 +162,27 @@
   #diffTag { position:absolute; top:126px; left:0; right:0; text-align:center; font-size:13px;
     font-weight:800; letter-spacing:3px; opacity:.7; text-shadow:0 2px 8px #000; color:var(--accent); }
   #verdict .pts { font-size:34px; margin-top:2px; }
+
+  /* start countdown */
+  #countdown { position:absolute; top:50%; left:0; right:0; transform:translateY(-50%);
+    text-align:center; font-size:clamp(90px,26vw,210px); font-weight:900; color:#fff; letter-spacing:4px;
+    text-shadow:0 0 55px rgba(0,229,255,.7), 0 6px 30px #000; pointer-events:none; }
+  #countdown.pop { animation:cdPop .5s ease; }
+  @keyframes cdPop { 0%{transform:translateY(-50%) scale(.4); opacity:0}
+    30%{opacity:1} 100%{transform:translateY(-50%) scale(1); opacity:.95} }
+
+  /* score multiplier + difficulty hints (Settings) */
+  .mult { display:flex; flex-direction:column; align-items:center; gap:3px; margin:0 0 16px;
+    padding:12px; border-radius:14px; background:rgba(0,229,255,.06); border:1px solid var(--line); }
+  .mult-label { font-size:11px; letter-spacing:3px; color:rgba(255,255,255,.55); }
+  .mult-val { display:inline-block; font-size:38px; font-weight:700; letter-spacing:1px; line-height:1;
+    background:linear-gradient(90deg,var(--magenta),var(--accent),var(--gold));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .mult-val.bump { animation:multBump .3s ease; }
+  @keyframes multBump { 0%{transform:scale(1)} 45%{transform:scale(1.22)} 100%{transform:scale(1)} }
+  .hint { display:flex; justify-content:space-between; font-size:10px; letter-spacing:1px;
+    margin-top:6px; color:rgba(255,255,255,.4); }
+  .hint .hard { color:var(--magenta); font-weight:700; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -183,6 +204,7 @@
     <div id="timer">25</div>
     <div id="diffTag"></div>
     <div id="poseName">GET READY</div>
+    <div id="countdown" class="hidden"></div>
     <div id="verdict"></div>
     <div id="meterWrap">
       <div id="meterTrack"><div id="meterFill"></div></div>
@@ -198,16 +220,22 @@
       <button id="startBtn" class="cta">Start</button>
       <div class="panels">
         <section class="panel">
-          <div class="panel-head"><h2>Settings</h2><small id="diffReadout">×1.00</small></div>
+          <div class="panel-head"><h2>Settings</h2></div>
+          <div class="mult">
+            <span class="mult-label">SCORE MULTIPLIER</span>
+            <span class="mult-val" id="diffReadout">×1.00</span>
+          </div>
           <label class="ctl">
             <span class="row"><span>TEMPO</span><span class="val" id="bpmVal">95 BPM</span></span>
             <input type="range" id="bpm" min="60" max="140" value="95" />
+            <div class="hint"><span>slower</span><span class="hard">faster · harder →</span></div>
           </label>
           <label class="ctl">
             <span class="row"><span>BEATS / POSE</span><span class="val" id="holdVal">4</span></span>
             <input type="range" id="hold" min="2" max="6" value="4" />
+            <div class="hint"><span class="hard">← fewer · harder</span><span>more</span></div>
           </label>
-          <div id="diffNote">25-second rounds · faster tempo &amp; fewer beats/pose = more points</div>
+          <div id="diffNote">25-second round · 3… 2… 1 countdown before each run</div>
           <label class="file">▸ optional track <input type="file" id="music" accept="audio/*" /></label>
           <div id="status">Loading AI pose model…</div>
         </section>
@@ -246,6 +274,7 @@ const statusEl = document.getElementById('status');
 const startBtn = document.getElementById('startBtn');
 const flash = document.getElementById('flash');
 const beatDot = document.getElementById('beat');
+const countdownEl = document.getElementById('countdown');
 const verdictEl = document.getElementById('verdict');
 const meterFill = document.getElementById('meterFill');
 const meterLabel = document.getElementById('meterLabel');
@@ -272,7 +301,10 @@ const diffReadout = document.getElementById('diffReadout');
 
 // difficulty multiplier: faster tempo + fewer beats per pose = harder = more points
 function difficulty(bpm,hold){ return (bpm/95) * (4/hold); }
-function updateDiff(){ diffReadout.textContent = '×'+difficulty(Number(bpmSlider.value),Number(holdSlider.value)).toFixed(2); }
+function updateDiff(){
+  diffReadout.textContent = '×'+difficulty(Number(bpmSlider.value),Number(holdSlider.value)).toFixed(2);
+  diffReadout.classList.remove('bump'); void diffReadout.offsetWidth; diffReadout.classList.add('bump');
+}
 
 bpmSlider.oninput = () => { bpmVal.textContent = bpmSlider.value + ' BPM'; updateDiff(); };
 holdSlider.oninput = () => { holdVal.textContent = holdSlider.value; updateDiff(); };
@@ -391,8 +423,17 @@ async function submitScore(){
 function toMenu(){ gameover.classList.add('hidden'); hud.classList.add('hidden'); menu.classList.remove('hidden'); loadLeaderboard(); }
 
 /* ---------- game state ---------- */
-const GAME_SECONDS=25;
+const GAME_SECONDS=25, COUNTDOWN_SECS=3;
 let running=false, startTime=0, secPerBeat=0.6, holdBeats=4, diffMult=1, ended=false;
+let lastCount=-1, preStarted=false;
+function countBeep(go){
+  if(!actx) return;
+  const o=actx.createOscillator(), g=actx.createGain(), t=actx.currentTime;
+  o.type='sine'; o.frequency.value = go? 880 : 440;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.32,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+(go?0.32:0.16));
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+(go?0.34:0.18));
+}
 let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0, accSum=0;
 
@@ -545,6 +586,22 @@ function loop(){
     if(res.landmarks && res.landmarks[0]) lm=res.landmarks[0];
   }
 
+  // start countdown (3-2-1) — draw the player so they can frame up, no game logic yet
+  const pre = startTime - actx.currentTime;
+  if(pre > 0){
+    const c = Math.ceil(pre);
+    if(c !== lastCount){ lastCount=c; countBeep(false);
+      countdownEl.classList.remove('pop'); void countdownEl.offsetWidth; countdownEl.classList.add('pop'); }
+    countdownEl.classList.remove('hidden'); countdownEl.textContent = c;
+    if(lm) drawPlayer(lm,W,H,'#9ad');
+    meterFill.style.width='0%';
+    meterLabel.textContent = lm? 'GET READY' : 'step into frame';
+    timerEl.textContent = GAME_SECONDS;
+    requestAnimationFrame(loop); return;
+  }
+  if(!preStarted){ preStarted=true; lastCount=0; countBeep(true);
+    countdownEl.textContent='GO!'; setTimeout(()=>countdownEl.classList.add('hidden'),450); }
+
   // beat clock
   const beatF=(actx.currentTime-startTime)/secPerBeat;
   const b=Math.floor(beatF);
@@ -592,13 +649,15 @@ startBtn.onclick = async () => {
   holdBeats = Number(holdSlider.value);
   diffMult = difficulty(Number(bpmSlider.value), Number(holdSlider.value));
   score=0; combo=0; fits=0; total=0; accSum=0; lastBeat=-1; current=null; liveScore=0; ended=false;
+  lastCount=-1; preStarted=false;
   scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0';
   diffTag.textContent='DIFFICULTY ×'+diffMult.toFixed(2);
   timerEl.textContent=GAME_SECONDS; timerEl.classList.remove('warn'); timeBar.style.transform='scaleX(1)';
+  countdownEl.classList.add('hidden');
 
   gameover.classList.add('hidden');
   menu.classList.add('hidden'); hud.classList.remove('hidden');
-  startTime = actx.currentTime + 0.15;
+  startTime = actx.currentTime + COUNTDOWN_SECS;   // 3-2-1 before the round begins
   if(songBuffer){ songSource=actx.createBufferSource(); songSource.buffer=songBuffer;
     songSource.loop=true; songSource.connect(masterGain); songSource.start(startTime); }
   running=true;
