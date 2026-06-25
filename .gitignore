@@ -36,3 +36,7 @@ Thumbs.db
 
 # Project scratch
 scratchpad/
+
+# Playwright MCP scratch + verification screenshots
+.playwright-mcp/
+/menu-*.png
