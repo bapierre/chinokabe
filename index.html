@@ -6,12 +6,15 @@
 <title>CHINOKABE — Beat the Wall</title>
 <link rel="icon" type="image/webp" href="logo.webp" />
 <link rel="apple-touch-icon" href="logo.webp" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  :root { --accent:#00e5ff; --good:#33ff99; --bad:#ff3366; --bg:#05060f;
+  :root { --accent:#00e5ff; --magenta:#ff2d9b; --good:#33ff99; --bad:#ff3366; --bg:#05060f;
     --gold:#ffd23f; --panel:rgba(255,255,255,.045); --line:rgba(255,255,255,.10); }
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body { height:100%; background:var(--bg); color:#fff;
-    font-family:"Segoe UI",system-ui,sans-serif; overflow:hidden; }
+    font-family:"Chakra Petch","Segoe UI",system-ui,sans-serif; overflow:hidden; }
   #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
   #stage { position:relative; width:100%; height:100%; }
   video { display:none; }
@@ -49,32 +52,51 @@
     width:14px; height:14px; border-radius:50%; background:#fff; opacity:.25; }
 
   /* start / menu */
-  #menu { position:absolute; inset:0; background:radial-gradient(circle at 50% 35%,#101637,#05060f 70%);
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:18px; pointer-events:auto; text-align:center; padding:24px; }
-  #menu h1 { font-size:clamp(40px,9vw,84px); letter-spacing:6px; font-weight:900;
-    background:linear-gradient(90deg,var(--accent),#a855f7,#ffd23f);
-    -webkit-background-clip:text; background-clip:text; color:transparent; }
-  #menu p { max-width:520px; opacity:.8; line-height:1.5; font-size:15px; }
-  .controls { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:center;
-    margin-top:6px; }
-  .ctl { display:flex; flex-direction:column; gap:4px; font-size:12px; letter-spacing:1px; opacity:.85; }
-  input[type=range]{ width:150px; }
-  button { pointer-events:auto; cursor:pointer; border:none; border-radius:40px;
-    padding:16px 42px; font-size:20px; font-weight:800; letter-spacing:2px; color:#05060f;
-    background:linear-gradient(90deg,var(--accent),#7cf); box-shadow:0 8px 30px rgba(0,229,255,.4); }
-  button:active { transform:translateY(2px); }
-  .file { font-size:12px; opacity:.7; }
-  #status { font-size:13px; opacity:.7; min-height:18px; }
+  /* start page — design from chinokabe-game branch */
+  #menu { position:absolute; inset:0; pointer-events:auto; overflow-y:auto;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:clamp(40px,8vh,96px) 20px clamp(28px,5vh,56px);
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,45,155,.18), transparent 55%),
+      radial-gradient(120% 90% at 50% 110%, rgba(0,229,255,.16), transparent 55%),
+      #05060f; }
+  .panels-shell { width:min(940px,100%); display:flex; flex-direction:column;
+    align-items:center; gap:clamp(18px,3.2vh,30px); }
+  .tagline { max-width:460px; text-align:center; line-height:1.55; font-size:14px;
+    font-weight:400; letter-spacing:.3px; color:rgba(255,255,255,.66); }
+  .cta { pointer-events:auto; cursor:pointer; border:none; border-radius:999px;
+    padding:17px 64px; font-family:inherit; font-size:21px; font-weight:700; letter-spacing:4px;
+    color:#05060f; text-transform:uppercase;
+    background:linear-gradient(90deg,var(--magenta),var(--accent));
+    box-shadow:0 10px 34px rgba(255,45,155,.4), 0 0 0 1px rgba(255,255,255,.12) inset;
+    transition:transform .12s ease, box-shadow .12s ease; }
+  .cta:hover { transform:translateY(-2px); box-shadow:0 16px 44px rgba(0,229,255,.45); }
+  .cta:active { transform:translateY(1px); }
+  .cta:disabled { filter:grayscale(.6) brightness(.7); cursor:default; box-shadow:none; }
+  .panels { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:720px){ .panels { grid-template-columns:1fr; } }
+  .ctl { display:block; margin-bottom:18px; }
+  .ctl .row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
+  .ctl .row span:first-child { font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.6); }
+  .ctl .row .val { font-size:14px; font-weight:700; color:var(--accent); letter-spacing:1px; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:6px;
+    background:linear-gradient(90deg,var(--magenta),var(--accent)); outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 0 0 4px rgba(0,229,255,.25); cursor:pointer; }
+  .file { display:flex; align-items:center; gap:8px; font-size:12px; letter-spacing:1px;
+    color:rgba(255,255,255,.55); margin-top:4px; }
+  .file input { font-size:11px; color:rgba(255,255,255,.5); }
+  #status { margin-top:14px; font-size:12px; letter-spacing:1px; color:rgba(0,229,255,.85); min-height:16px; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
 
   /* player tag + leaderboard + results */
-  #player { pointer-events:auto; text-align:center; text-transform:uppercase; letter-spacing:3px;
-    font-weight:800; font-size:18px; padding:12px 18px; border-radius:30px;
-    border:2px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:#fff; width:230px; }
-  #player:focus { outline:none; border-color:var(--accent); }
-  /* leaderboard panel — design from chinokabe-game branch */
-  .panel { width:min(92%,440px); background:var(--panel); border:1px solid var(--line);
+  #player { width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--line);
+    background:rgba(255,255,255,.06); color:#fff; font-family:inherit; font-size:15px; font-weight:600;
+    letter-spacing:2px; text-transform:uppercase; outline:none; }
+  #player:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,229,255,.2); }
+  #player::placeholder { color:rgba(255,255,255,.35); }
+  /* glass panels — design from chinokabe-game branch */
+  .panel { background:var(--panel); border:1px solid var(--line);
     border-radius:18px; padding:clamp(16px,2.4vw,24px); backdrop-filter:blur(8px); pointer-events:auto; }
   .panel-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
   .panel-head h2 { font-size:13px; letter-spacing:4px; font-weight:700; color:#fff; text-transform:uppercase; }
@@ -103,8 +125,7 @@
   #diffNote b { color:var(--accent); }
 
   /* logo */
-  #logo { width:min(88%,480px); height:auto; mix-blend-mode:screen;
-    filter:drop-shadow(0 8px 34px rgba(0,229,255,.35)); margin:-4px 0 -6px; }
+  #logo { width:min(64vw,360px); height:auto; filter:drop-shadow(0 10px 46px rgba(255,45,155,.4)); }
   #hudLogo { position:absolute; left:14px; bottom:14px; height:42px; width:auto;
     opacity:.5; pointer-events:none; mix-blend-mode:screen;
     filter:drop-shadow(0 2px 6px #000); }
@@ -149,26 +170,37 @@
   </div>
 
   <div id="menu">
-    <div id="result" class="hidden"></div>
-    <img id="logo" src="logo.webp" alt="CHINOKABE — Beat the Wall" />
-    <p>The wall is coming. Strike the pose before it hits the beat.
-       Stand back so your whole upper body is in frame. The AI judges your fit.</p>
-    <input id="player" maxlength="12" placeholder="YOUR TAG" autocomplete="off" spellcheck="false" />
-    <div class="controls">
-      <label class="ctl">TEMPO <span id="bpmVal">95 BPM</span>
-        <input type="range" id="bpm" min="60" max="140" value="95" /></label>
-      <label class="ctl">BEATS / POSE <span id="holdVal">4</span>
-        <input type="range" id="hold" min="2" max="6" value="4" /></label>
+    <div class="panels-shell">
+      <div id="result" class="hidden"></div>
+      <img id="logo" src="logo.webp" alt="CHINOKABE — Beat the Wall" />
+      <p class="tagline">The wall is coming. Strike the pose before it hits the beat.
+        Stand back so your upper body fills the frame — the AI judges your fit.</p>
+      <button id="startBtn" class="cta">Start</button>
+      <div class="panels">
+        <section class="panel">
+          <div class="panel-head"><h2>Settings</h2><small id="diffReadout">×1.00</small></div>
+          <label class="ctl">
+            <span class="row"><span>YOUR TAG</span></span>
+            <input id="player" maxlength="12" placeholder="ANON" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="ctl">
+            <span class="row"><span>TEMPO</span><span class="val" id="bpmVal">95 BPM</span></span>
+            <input type="range" id="bpm" min="60" max="140" value="95" />
+          </label>
+          <label class="ctl">
+            <span class="row"><span>BEATS / POSE</span><span class="val" id="holdVal">4</span></span>
+            <input type="range" id="hold" min="2" max="6" value="4" />
+          </label>
+          <div id="diffNote">25-second rounds · faster tempo &amp; fewer beats/pose = more points</div>
+          <label class="file">▸ optional track <input type="file" id="music" accept="audio/*" /></label>
+          <div id="status">Loading AI pose model…</div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Leaderboard</h2><small id="boardCount">top 20</small></div>
+          <ol id="boardList"></ol>
+        </section>
+      </div>
     </div>
-    <div id="diffNote">25-second rounds · score <b id="diffReadout">×1.00</b> — faster tempo &amp; fewer beats/pose = harder = more points</div>
-    <button id="startBtn">START</button>
-    <label class="file">▸ optional: play your own track
-      <input type="file" id="music" accept="audio/*" /></label>
-    <section class="panel">
-      <div class="panel-head"><h2>Leaderboard</h2><small id="boardCount">top 20</small></div>
-      <ol id="boardList"></ol>
-    </section>
-    <div id="status">Loading AI pose model…</div>
   </div>
 </div></div>
 
