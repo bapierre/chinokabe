@@ -1,0 +1,6 @@
+/* src/style.css */
+:root { --accent:#00e5ff; --good:#33ff99; --bad:#ff3366; --bg:#05060f; }
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; background:var(--bg); color:#fff;
+  font-family:"Segoe UI",system-ui,sans-serif; overflow:hidden; }
+#app { position:fixed; inset:0; }
