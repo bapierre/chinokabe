@@ -63,6 +63,28 @@
   #status { font-size:13px; opacity:.7; min-height:18px; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
   .hidden { display:none !important; }
+
+  /* leaderboard + game over */
+  #board { margin-top:10px; width:min(86vw,360px); }
+  #board h2 { font-size:13px; letter-spacing:3px; opacity:.6; margin-bottom:8px; font-weight:800; }
+  #board ol, #gameover ol { list-style:none; }
+  #board li { display:flex; justify-content:space-between; padding:7px 12px; border-radius:8px;
+    font-size:14px; font-weight:600; }
+  #board li:nth-child(odd) { background:rgba(255,255,255,.05); }
+  #board li span:last-child { color:var(--accent); font-weight:800; }
+  #gameover { position:absolute; inset:0; z-index:5;
+    background:radial-gradient(circle at 50% 35%,#101637,#05060f 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    pointer-events:auto; text-align:center; padding:24px; }
+  #gameover h2 { font-size:clamp(28px,7vw,54px); letter-spacing:5px; font-weight:900;
+    background:linear-gradient(90deg,var(--accent),#a855f7,#ffd23f);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #gameover .final b { font-size:64px; color:var(--accent); display:block; line-height:1; }
+  #gameover .final small { font-size:13px; letter-spacing:2px; opacity:.7; }
+  #nameInput { padding:12px 16px; border-radius:10px; border:none; font-size:18px;
+    text-align:center; min-width:220px; }
+  .goBtns { display:flex; gap:14px; }
+  button.ghost { background:#1a2140; color:#fff; box-shadow:none; }
 </style>
 </head>
 <body>
@@ -100,6 +122,20 @@
     <label class="file">▸ optional: play your own track
       <input type="file" id="music" accept="audio/*" /></label>
     <div id="status">Loading AI pose model…</div>
+    <div id="board">
+      <h2>LEADERBOARD</h2>
+      <ol id="boardList"></ol>
+    </div>
+  </div>
+
+  <div id="gameover" class="hidden">
+    <h2>RUN COMPLETE</h2>
+    <div class="final"><b id="finalScore">0</b><small>SCORE · <span id="finalAcc">0%</span> fit</small></div>
+    <input id="nameInput" type="text" maxlength="12" placeholder="your name" />
+    <div class="goBtns">
+      <button id="saveScoreBtn">SAVE SCORE</button>
+      <button id="againBtn" class="ghost">SKIP</button>
+    </div>
   </div>
 </div></div>
 
@@ -217,6 +253,7 @@ musicInput.onchange = async () => {
 let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
 let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0;
+const MAX_POSES=12; // fixed-length run so there's a score to record
 
 function spawnTarget(beat){
   let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
@@ -247,9 +284,50 @@ function onBeat(beat){
     showVerdict(ok, pct);
     sfx(ok);
     scoreB.textContent=score; comboB.textContent=combo; hitsB.textContent=fits+'/'+total;
+    if(total>=MAX_POSES){ endGame(); return; }
     spawnTarget(beat); // next wall starts immediately on the beat
   }
 }
+
+/* ---------- leaderboard (localStorage) + end of run ---------- */
+const LB_KEY='chinokabe.scores';
+const boardList=document.getElementById('boardList');
+const gameover=document.getElementById('gameover');
+const finalScoreEl=document.getElementById('finalScore');
+const finalAccEl=document.getElementById('finalAcc');
+const nameInput=document.getElementById('nameInput');
+const saveScoreBtn=document.getElementById('saveScoreBtn');
+const againBtn=document.getElementById('againBtn');
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function loadScores(){ try{ return JSON.parse(localStorage.getItem(LB_KEY))||[]; }catch(e){ return []; } }
+function saveScore(rec){ const all=loadScores(); all.push(rec); all.sort((a,b)=>b.score-a.score);
+  try{ localStorage.setItem(LB_KEY, JSON.stringify(all.slice(0,50))); }catch(e){} }
+function renderBoard(){ const rows=loadScores().slice(0,5);
+  boardList.innerHTML = rows.length
+    ? rows.map((r,i)=>`<li><span>${i+1}. ${escapeHtml(r.name)}</span><span>${r.score}</span></li>`).join('')
+    : '<li><span>no scores yet — be the first!</span><span></span></li>'; }
+
+function endGame(){
+  running=false;
+  if(songSource){ try{ songSource.stop(); }catch(e){} songSource=null; }
+  hud.classList.add('hidden');
+  finalScoreEl.textContent=score;
+  finalAccEl.textContent=(total? Math.round(fits/total*100):0)+'%';
+  nameInput.value='';
+  gameover.classList.remove('hidden');
+  setTimeout(()=>nameInput.focus(),50);
+}
+function toMenu(){
+  gameover.classList.add('hidden'); hud.classList.add('hidden'); menu.classList.remove('hidden');
+  renderBoard();
+  startBtn.disabled = !landmarker;
+  statusEl.textContent = landmarker? 'AI ready ✓ — press START' : 'Loading AI pose model…';
+}
+saveScoreBtn.onclick=()=>{ const name=(nameInput.value.trim()||'ANON').slice(0,12);
+  saveScore({name,score,fits,total,ts:Date.now()}); toMenu(); };
+againBtn.onclick=()=>toMenu();
+renderBoard();
 
 function showVerdict(ok,pct){
   verdictEl.textContent = (ok?'FIT! ':'MISS ')+pct+'%';
