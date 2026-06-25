@@ -53,7 +53,22 @@ npx wrangler pages deploy . --project-name chinokabe
 Then in the Cloudflare dashboard → **Pages → chinokabe → Settings**:
 - **Functions → D1 bindings**: add binding `DB` → `chinokabe-scores` (if not already
   picked up from `wrangler.toml`).
-- **Custom domains**: add your domain (the domain must be on this Cloudflare account).
+
+### Connect chinokabe.com
+
+The domain must be a **zone on this same Cloudflare account** (so Pages can manage the
+apex record):
+
+1. Cloudflare dashboard → **Add a site** → `chinokabe.com` → it shows two nameservers.
+2. At your registrar, set the domain's **nameservers** to those two. Wait for it to go
+   "Active" (minutes to a few hours).
+3. **Pages → chinokabe → Custom domains → Set up a domain** → add `chinokabe.com`
+   **and** `www.chinokabe.com`. Cloudflare creates the records and TLS cert automatically.
+4. Optional: a redirect rule `www.chinokabe.com/*` → `https://chinokabe.com/$1` (or vice
+   versa) so there's one canonical host.
+
+HTTPS is automatic — no cert work. After this, the game + leaderboard are live at
+`https://chinokabe.com`, including the camera (secure context) and `/api/scores`.
 
 ### Recommended: auto-deploy from GitHub
 In the dashboard, **Pages → Create → Connect to Git → `bapierre/chinokabe`**. Every
