@@ -52,8 +52,8 @@
     width:14px; height:14px; border-radius:50%; background:#fff; opacity:.25; }
 
   /* start / menu */
-  /* start page — design from chinokabe-game branch */
-  #menu { position:absolute; inset:0; pointer-events:auto; overflow-y:auto;
+  /* start page + game over — design from chinokabe-game branch */
+  #menu, #gameover { position:absolute; inset:0; pointer-events:auto; overflow-y:auto;
     display:flex; align-items:flex-start; justify-content:center;
     padding:clamp(40px,8vh,96px) 20px clamp(28px,5vh,56px);
     background:
@@ -87,6 +87,27 @@
     color:rgba(255,255,255,.55); margin-top:4px; }
   .file input { font-size:11px; color:rgba(255,255,255,.5); }
   #status { margin-top:14px; font-size:12px; letter-spacing:1px; color:rgba(0,229,255,.85); min-height:16px; }
+
+  /* game over screen */
+  #gameover { z-index:5; align-items:center; padding-top:clamp(28px,5vh,56px); }
+  #gameover .panels-shell { gap:clamp(14px,2.6vh,24px); }
+  #gameover h2 { font-size:clamp(26px,6vw,46px); letter-spacing:6px; font-weight:700;
+    background:linear-gradient(90deg,var(--magenta),var(--accent),var(--gold));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #gameover .final { text-align:center; }
+  #gameover .final b { font-size:clamp(56px,12vw,84px); color:#fff; display:block; line-height:1;
+    text-shadow:0 0 30px rgba(0,229,255,.5); }
+  #gameover .final small { font-size:12px; letter-spacing:3px; color:rgba(255,255,255,.6); }
+  #nameInput { padding:13px 18px; border-radius:12px; border:1px solid var(--line); font-family:inherit;
+    font-size:18px; font-weight:600; letter-spacing:1px; text-align:center; min-width:260px;
+    background:rgba(255,255,255,.06); color:#fff; outline:none; }
+  #nameInput:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,229,255,.2); }
+  #nameInput::placeholder { color:rgba(255,255,255,.35); }
+  .goBtns { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  button.ghost { cursor:pointer; border-radius:999px; font-family:inherit; font-size:18px; font-weight:700;
+    letter-spacing:3px; text-transform:uppercase; padding:17px 40px;
+    background:rgba(255,255,255,.06); color:#fff; border:1px solid var(--line); transition:background .12s; }
+  button.ghost:hover { background:rgba(255,255,255,.1); }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
 
   /* player tag + leaderboard + results */
@@ -171,7 +192,6 @@
 
   <div id="menu">
     <div class="panels-shell">
-      <div id="result" class="hidden"></div>
       <img id="logo" src="logo.webp" alt="CHINOKABE — Beat the Wall" />
       <p class="tagline">The wall is coming. Strike the pose before it hits the beat.
         Stand back so your upper body fills the frame — the AI judges your fit.</p>
@@ -179,10 +199,6 @@
       <div class="panels">
         <section class="panel">
           <div class="panel-head"><h2>Settings</h2><small id="diffReadout">×1.00</small></div>
-          <label class="ctl">
-            <span class="row"><span>YOUR TAG</span></span>
-            <input id="player" maxlength="12" placeholder="ANON" autocomplete="off" spellcheck="false" />
-          </label>
           <label class="ctl">
             <span class="row"><span>TEMPO</span><span class="val" id="bpmVal">95 BPM</span></span>
             <input type="range" id="bpm" min="60" max="140" value="95" />
@@ -199,6 +215,18 @@
           <div class="panel-head"><h2>Leaderboard</h2><small id="boardCount">top 20</small></div>
           <ol id="boardList"></ol>
         </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameover" class="hidden">
+    <div class="panels-shell">
+      <h2>Run Complete</h2>
+      <div class="final"><b id="finalScore">0</b><small>SCORE · <span id="finalAcc">0%</span> FIT</small></div>
+      <input id="nameInput" type="text" maxlength="12" placeholder="enter your name" autocomplete="off" spellcheck="false" />
+      <div class="goBtns">
+        <button id="saveScoreBtn" class="cta">Save</button>
+        <button id="againBtn" class="ghost">Skip</button>
       </div>
     </div>
   </div>
@@ -230,9 +258,13 @@ const holdSlider = document.getElementById('hold');
 const bpmVal = document.getElementById('bpmVal');
 const holdVal = document.getElementById('holdVal');
 const musicInput = document.getElementById('music');
-const playerInput = document.getElementById('player');
 const boardList = document.getElementById('boardList');
-const resultEl = document.getElementById('result');
+const gameover = document.getElementById('gameover');
+const finalScoreEl = document.getElementById('finalScore');
+const finalAccEl = document.getElementById('finalAcc');
+const nameInput = document.getElementById('nameInput');
+const saveScoreBtn = document.getElementById('saveScoreBtn');
+const againBtn = document.getElementById('againBtn');
 const timerEl = document.getElementById('timer');
 const timeBar = document.getElementById('timeBar');
 const diffTag = document.getElementById('diffTag');
@@ -245,7 +277,6 @@ function updateDiff(){ diffReadout.textContent = '×'+difficulty(Number(bpmSlide
 bpmSlider.oninput = () => { bpmVal.textContent = bpmSlider.value + ' BPM'; updateDiff(); };
 holdSlider.oninput = () => { holdVal.textContent = holdSlider.value; updateDiff(); };
 updateDiff();
-playerInput.value = (localStorage.getItem('chino_name') || '').slice(0,12);
 
 /* ---------- pose templates (UPPER BODY only) ----------
    Units = shoulder width. Origin = midpoint of shoulders. +x right, -y up.
@@ -347,7 +378,7 @@ async function loadLeaderboard(){
   }
 }
 async function submitScore(){
-  const name = (playerInput.value||'ANON').trim().slice(0,12) || 'ANON';
+  const name = (nameInput.value||'ANON').trim().slice(0,12) || 'ANON';
   lastSubmitName = name;
   localStorage.setItem('chino_name', name);
   try{
@@ -357,6 +388,7 @@ async function submitScore(){
     return await r.json(); // { ok, rank, players }
   }catch(e){ return null; }
 }
+function toMenu(){ gameover.classList.add('hidden'); hud.classList.add('hidden'); menu.classList.remove('hidden'); loadLeaderboard(); }
 
 /* ---------- game state ---------- */
 const GAME_SECONDS=25;
@@ -404,21 +436,26 @@ function onBeat(beat){
   }
 }
 
-async function endRound(){
+function endRound(){
   running=false; current=null; liveScore=0;
   if(songSource){ try{ songSource.stop(); }catch(e){} songSource=null; }
-  const avgAcc = total? Math.round(accSum/total*100):0;
-  hud.classList.add('hidden'); menu.classList.remove('hidden');
-  startBtn.textContent='PLAY AGAIN';
-  resultEl.classList.remove('hidden');
-  const line = `${fits}/${total} fits · ${avgAcc}% avg · diff ×${diffMult.toFixed(2)}`;
-  resultEl.innerHTML = `TIME!<br><span class="big">${score}</span><br>${line} · submitting…`;
-  const res = await submitScore();
-  resultEl.innerHTML = `TIME!<br><span class="big">${score}</span><br>${line}` +
-    (res && res.rank ? ` · <b style="color:#ffd23f">rank #${res.rank}</b> of ${res.players}`
-                     : ` · <span style="opacity:.6">(leaderboard offline)</span>`);
-  loadLeaderboard();
+  const fitPct = total? Math.round(fits/total*100):0;
+  finalScoreEl.textContent = score;
+  finalAccEl.textContent = fitPct+'%';
+  nameInput.value = (localStorage.getItem('chino_name') || '').slice(0,12);
+  saveScoreBtn.disabled = false; saveScoreBtn.textContent = 'Save';
+  hud.classList.add('hidden');
+  gameover.classList.remove('hidden');
+  setTimeout(()=>{ try{ nameInput.focus(); }catch(e){} }, 60);
 }
+
+saveScoreBtn.onclick = async () => {
+  saveScoreBtn.disabled = true; saveScoreBtn.textContent = 'Saving…';
+  await submitScore();
+  toMenu();
+};
+againBtn.onclick = () => toMenu();   // Skip — don't save
+nameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); saveScoreBtn.click(); } });
 
 function showVerdict(ok,tier,pct,gained){
   const col = !ok ? 'var(--bad)' : tier==='PERFECT' ? '#c084fc' : tier==='GREAT' ? '#33ff99' : '#ffd23f';
@@ -559,7 +596,7 @@ startBtn.onclick = async () => {
   diffTag.textContent='DIFFICULTY ×'+diffMult.toFixed(2);
   timerEl.textContent=GAME_SECONDS; timerEl.classList.remove('warn'); timeBar.style.transform='scaleX(1)';
 
-  resultEl.classList.add('hidden');
+  gameover.classList.add('hidden');
   menu.classList.add('hidden'); hud.classList.remove('hidden');
   startTime = actx.currentTime + 0.15;
   if(songBuffer){ songSource=actx.createBufferSource(); songSource.buffer=songBuffer;
