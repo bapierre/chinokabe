@@ -1,0 +1,12 @@
+.git
+.wrangler
+node_modules
+scratchpad
+*.log
+wrangler.toml
+schema.sql
+package.json
+package-lock.json
+.gitignore
+.assetsignore
+README.md

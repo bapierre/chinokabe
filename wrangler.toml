@@ -2,8 +2,9 @@ name = "chinokabe"
 compatibility_date = "2025-06-01"
 pages_build_output_dir = "."
 
-# Deploys into Wiebe803@gmail.com's account (where the D1 below was created).
-account_id = "eb0d84444219d3370d89461149066b0e"
+# Deploy into Wiebe803@gmail.com's account (where the D1 below lives):
+#   CLOUDFLARE_ACCOUNT_ID=eb0d84444219d3370d89461149066b0e npx wrangler pages deploy .
+# (Pages config files don't accept account_id; use the env var.)
 
 # D1 leaderboard database (created via Cloudflare MCP, region WEUR).
 [[d1_databases]]
