@@ -98,6 +98,11 @@
     color:rgba(255,255,255,.55); margin-top:4px; }
   .file input { font-size:11px; color:rgba(255,255,255,.5); }
   #status { margin-top:14px; font-size:12px; letter-spacing:1px; color:rgba(0,229,255,.85); min-height:16px; }
+  .multbox { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; padding:12px 14px;
+    border-radius:12px; background:rgba(255,210,63,.08); border:1px solid rgba(255,210,63,.25); }
+  .multbox > span { font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.6); }
+  .multbox b { font-size:22px; font-weight:700; color:var(--gold); letter-spacing:1px; margin-left:auto; }
+  .multbox small { flex-basis:100%; font-size:10px; letter-spacing:.5px; color:rgba(255,255,255,.38); }
 
   /* leaderboard panel */
   #boardList { list-style:none; max-height:clamp(200px,36vh,340px); overflow-y:auto;
@@ -177,6 +182,10 @@
             <span class="row"><span>BEATS / POSE</span><span class="val" id="holdVal">4</span></span>
             <input type="range" id="hold" min="2" max="6" value="4" />
           </label>
+          <div class="multbox">
+            <span>PACE MULTIPLIER</span><b id="multVal">×1.00</b>
+            <small>faster tempo &amp; fewer beats = more points</small>
+          </div>
           <div id="status">Loading AI pose model…</div>
         </section>
         <section class="panel">
@@ -190,7 +199,7 @@
   <div id="gameover" class="hidden">
     <div class="panels-shell">
       <h2>Run Complete</h2>
-      <div class="final"><b id="finalScore">0</b><small>SCORE · <span id="finalAcc">0%</span> FIT</small></div>
+      <div class="final"><b id="finalScore">0</b><small>SCORE · <span id="finalAcc">0%</span> FIT · <span id="finalMult">×1.00</span> PACE</small></div>
       <input id="nameInput" type="text" maxlength="12" placeholder="enter your name" />
       <div class="goBtns">
         <button id="saveScoreBtn" class="cta">Save</button>
@@ -226,8 +235,14 @@ const holdSlider = document.getElementById('hold');
 const bpmVal = document.getElementById('bpmVal');
 const holdVal = document.getElementById('holdVal');
 
-bpmSlider.oninput = () => bpmVal.textContent = bpmSlider.value + ' BPM';
-holdSlider.oninput = () => holdVal.textContent = holdSlider.value;
+const multVal = document.getElementById('multVal');
+// Pace multiplier: faster tempo and fewer beats/pose = harder = worth more.
+// Default settings (95 BPM, 4 beats/pose) = ×1.00 so the leaderboard is fair across paces.
+function paceMult(){ return (Number(bpmSlider.value)/95) * (4/Number(holdSlider.value)); }
+function updateMult(){ multVal.textContent = '×'+paceMult().toFixed(2); }
+bpmSlider.oninput = () => { bpmVal.textContent = bpmSlider.value + ' BPM'; updateMult(); };
+holdSlider.oninput = () => { holdVal.textContent = holdSlider.value; updateMult(); };
+updateMult();
 
 /* ---------- pose templates (UPPER BODY only) ----------
    Units = shoulder width. Origin = midpoint of shoulders. +x right, -y up.
@@ -307,6 +322,7 @@ let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
 let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0;
 const MAX_POSES=10; // fixed-length run so there's a score to record
+let scoreMult=1;    // pace multiplier captured at run start
 
 function spawnTarget(beat){
   let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
@@ -332,7 +348,7 @@ function onBeat(beat){
     const pct = Math.round(liveScore*100);
     const ok = liveScore >= 0.55;
     total++;
-    if(ok){ fits++; combo++; score += 100 + Math.round(liveScore*100) + combo*10; }
+    if(ok){ fits++; combo++; score += Math.round((100 + Math.round(liveScore*100) + combo*10) * scoreMult); }
     else { combo=0; }
     showVerdict(ok, pct);
     sfx(ok);
@@ -369,6 +385,7 @@ function endGame(){
   hud.classList.add('hidden');
   finalScoreEl.textContent=score;
   finalAccEl.textContent=(total? Math.round(fits/total*100):0)+'%';
+  const fm=document.getElementById('finalMult'); if(fm) fm.textContent='×'+scoreMult.toFixed(2);
   nameInput.value='';
   gameover.classList.remove('hidden');
   setTimeout(()=>nameInput.focus(),50);
@@ -509,6 +526,7 @@ startBtn.onclick = async () => {
   view.width=view.clientWidth; view.height=view.clientHeight;
   secPerBeat = 60/Number(bpmSlider.value);
   holdBeats = Number(holdSlider.value);
+  scoreMult = paceMult();
   score=0; combo=0; fits=0; total=0; lastBeat=-1; current=null; liveScore=0;
   scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0/0';
 
