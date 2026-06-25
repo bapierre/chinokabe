@@ -64,6 +64,30 @@
   .file { font-size:12px; opacity:.7; }
   #status { font-size:13px; opacity:.7; min-height:18px; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+
+  /* player tag + leaderboard + results */
+  #player { pointer-events:auto; text-align:center; text-transform:uppercase; letter-spacing:3px;
+    font-weight:800; font-size:18px; padding:12px 18px; border-radius:30px;
+    border:2px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:#fff; width:230px; }
+  #player:focus { outline:none; border-color:var(--accent); }
+  .board { width:min(92%,420px); background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:12px 18px;
+    max-height:32vh; overflow:auto; pointer-events:auto; }
+  .board-h { font-weight:800; letter-spacing:2px; font-size:13px; opacity:.8; margin-bottom:8px; }
+  #lbList { list-style:none; counter-reset:r; }
+  #lbList li { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:14px;
+    border-bottom:1px solid rgba(255,255,255,.06); }
+  #lbList li::before { counter-increment:r; content:counter(r); width:24px; text-align:right;
+    opacity:.5; font-weight:700; }
+  #lbList li .nm { flex:1; font-weight:700; letter-spacing:1px; }
+  #lbList li .sc { color:var(--accent); font-weight:800; }
+  #lbList li.me { color:#ffd23f; } #lbList li.me .sc { color:#ffd23f; }
+  #lbList .muted { opacity:.5; justify-content:center; }
+  #lbList .muted::before { content:''; width:0; }
+  #result { width:min(92%,420px); text-align:center; line-height:1.45;
+    background:linear-gradient(90deg,rgba(0,229,255,.16),rgba(168,85,247,.16));
+    border:1px solid var(--accent); border-radius:16px; padding:14px 16px; font-weight:800; }
+  #result .big { font-size:34px; color:var(--accent); }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -89,18 +113,26 @@
   </div>
 
   <div id="menu">
+    <div id="result" class="hidden"></div>
     <h1>CHINOKABE</h1>
     <p>The wall is coming. Strike the pose before it hits the beat.
        Stand back so your whole upper body is in frame. The AI judges your fit.</p>
+    <input id="player" maxlength="12" placeholder="YOUR TAG" autocomplete="off" spellcheck="false" />
     <div class="controls">
       <label class="ctl">TEMPO <span id="bpmVal">95 BPM</span>
         <input type="range" id="bpm" min="60" max="140" value="95" /></label>
       <label class="ctl">BEATS / POSE <span id="holdVal">4</span>
         <input type="range" id="hold" min="2" max="6" value="4" /></label>
+      <label class="ctl">POSES / ROUND <span id="roundVal">16</span>
+        <input type="range" id="round" min="8" max="32" step="4" value="16" /></label>
     </div>
     <button id="startBtn">START</button>
     <label class="file">▸ optional: play your own track
       <input type="file" id="music" accept="audio/*" /></label>
+    <div class="board">
+      <div class="board-h">🏆 GLOBAL LEADERBOARD</div>
+      <ol id="lbList"><li class="muted">loading…</li></ol>
+    </div>
     <div id="status">Loading AI pose model…</div>
   </div>
 </div></div>
@@ -131,9 +163,16 @@ const holdSlider = document.getElementById('hold');
 const bpmVal = document.getElementById('bpmVal');
 const holdVal = document.getElementById('holdVal');
 const musicInput = document.getElementById('music');
+const playerInput = document.getElementById('player');
+const roundSlider = document.getElementById('round');
+const roundVal = document.getElementById('roundVal');
+const lbList = document.getElementById('lbList');
+const resultEl = document.getElementById('result');
 
 bpmSlider.oninput = () => bpmVal.textContent = bpmSlider.value + ' BPM';
 holdSlider.oninput = () => holdVal.textContent = holdSlider.value;
+roundSlider.oninput = () => roundVal.textContent = roundSlider.value;
+playerInput.value = (localStorage.getItem('chino_name') || '').slice(0,12);
 
 /* ---------- pose templates (UPPER BODY only) ----------
    Units = shoulder width. Origin = midpoint of shoulders. +x right, -y up.
@@ -215,8 +254,39 @@ musicInput.onchange = async () => {
   statusEl.textContent = "Track loaded ✓ — it plays under the beat";
 };
 
+/* ---------- leaderboard (Cloudflare D1 via /api/scores) ---------- */
+const API='/api/scores';
+let lastSubmitName='';
+function esc(s){ return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+async function loadLeaderboard(){
+  try{
+    const r = await fetch(API,{cache:'no-store'});
+    if(!r.ok) throw 0;
+    const rows = await r.json();
+    if(!Array.isArray(rows) || !rows.length){
+      lbList.innerHTML='<li class="muted">no scores yet — be the first</li>'; return; }
+    lbList.innerHTML = rows.map(row=>{
+      const me = row.name===lastSubmitName ? ' class="me"' : '';
+      return `<li${me}><span class="nm">${esc(row.name)}</span><span class="sc">${row.score}</span></li>`;
+    }).join('');
+  }catch(e){
+    lbList.innerHTML='<li class="muted">leaderboard offline — deploy to Cloudflare to enable</li>';
+  }
+}
+async function submitScore(){
+  const name = (playerInput.value||'ANON').trim().slice(0,12) || 'ANON';
+  lastSubmitName = name;
+  localStorage.setItem('chino_name', name);
+  try{
+    const r = await fetch(API,{ method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, score, fits, total }) });
+    if(!r.ok) throw 0;
+    return await r.json(); // { ok, rank, players }
+  }catch(e){ return null; }
+}
+
 /* ---------- game state ---------- */
-let running=false, startTime=0, secPerBeat=0.6, holdBeats=4;
+let running=false, startTime=0, secPerBeat=0.6, holdBeats=4, roundTarget=16;
 let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0;
 
@@ -249,8 +319,23 @@ function onBeat(beat){
     showVerdict(ok, pct);
     sfx(ok);
     scoreB.textContent=score; comboB.textContent=combo; hitsB.textContent=fits+'/'+total;
-    spawnTarget(beat); // next wall starts immediately on the beat
+    if(total >= roundTarget) endRound(); else spawnTarget(beat); // next wall on the beat
   }
+}
+
+async function endRound(){
+  running=false; current=null; liveScore=0;
+  if(songSource){ try{ songSource.stop(); }catch(e){} songSource=null; }
+  const acc = total? Math.round(fits/total*100):0;
+  hud.classList.add('hidden'); menu.classList.remove('hidden');
+  startBtn.textContent='PLAY AGAIN';
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = `ROUND OVER<br><span class="big">${score}</span><br>${fits}/${total} fits · ${acc}% · submitting…`;
+  const res = await submitScore();
+  resultEl.innerHTML = `ROUND OVER<br><span class="big">${score}</span><br>${fits}/${total} fits · ${acc}%` +
+    (res && res.rank ? ` · <b style="color:#ffd23f">rank #${res.rank}</b> of ${res.players}`
+                     : ` · <span style="opacity:.6">(leaderboard offline)</span>`);
+  loadLeaderboard();
 }
 
 function showVerdict(ok,pct){
@@ -371,16 +456,18 @@ window.addEventListener('resize', ()=>{ view.width=view.clientWidth; view.height
 startBtn.disabled = true;
 startBtn.onclick = async () => {
   startBtn.disabled=true; statusEl.textContent="starting camera…";
-  try { await startCamera(); }
+  try { if(!cam.srcObject) await startCamera(); }
   catch(e){ statusEl.textContent="Camera blocked: "+e.message+" (needs https or localhost)"; startBtn.disabled=false; return; }
   if(!actx) initAudio(); else if(actx.state==='suspended') actx.resume();
 
   view.width=view.clientWidth; view.height=view.clientHeight;
   secPerBeat = 60/Number(bpmSlider.value);
   holdBeats = Number(holdSlider.value);
+  roundTarget = Number(roundSlider.value);
   score=0; combo=0; fits=0; total=0; lastBeat=-1; current=null; liveScore=0;
-  scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0/0';
+  scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0/'+roundTarget;
 
+  resultEl.classList.add('hidden');
   menu.classList.add('hidden'); hud.classList.remove('hidden');
   startTime = actx.currentTime + 0.15;
   if(songBuffer){ songSource=actx.createBufferSource(); songSource.buffer=songBuffer;
@@ -388,6 +475,8 @@ startBtn.onclick = async () => {
   running=true;
   requestAnimationFrame(loop);
 };
+
+loadLeaderboard(); // show the board on the menu at startup
 </script>
 </body>
 </html>

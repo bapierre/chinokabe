@@ -1,0 +1,15 @@
+{
+  "name": "chinokabe",
+  "private": true,
+  "description": "Webcam pose-to-the-beat hole-in-the-wall game with a global leaderboard.",
+  "scripts": {
+    "dev": "wrangler pages dev .",
+    "deploy": "wrangler pages deploy . --project-name chinokabe",
+    "db:create": "wrangler d1 create chinokabe-scores",
+    "db:init": "wrangler d1 execute chinokabe-scores --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute chinokabe-scores --local --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}
