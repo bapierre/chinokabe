@@ -22,7 +22,7 @@
   .stat small { display:block; font-size:11px; letter-spacing:2px; opacity:.6; font-weight:600; }
   .stat b { font-size:30px; color:var(--accent); }
   #combo b { color:#ffd23f; }
-  #poseName { position:absolute; top:74px; left:0; right:0; text-align:center;
+  #poseName { position:absolute; top:152px; left:0; right:0; text-align:center;
     font-size:26px; font-weight:800; letter-spacing:3px; text-shadow:0 2px 14px #000; opacity:.9; }
 
   /* live match meter */
@@ -88,6 +88,20 @@
     background:linear-gradient(90deg,rgba(0,229,255,.16),rgba(168,85,247,.16));
     border:1px solid var(--accent); border-radius:16px; padding:14px 16px; font-weight:800; }
   #result .big { font-size:34px; color:var(--accent); }
+  #diffNote { font-size:12px; opacity:.7; letter-spacing:.4px; max-width:440px; }
+  #diffNote b { color:var(--accent); }
+
+  /* timer */
+  #timeBar { position:absolute; top:0; left:0; height:6px; width:100%; transform-origin:left center;
+    background:linear-gradient(90deg,var(--bad),#ffd23f,var(--good)); box-shadow:0 0 12px rgba(255,255,255,.4);
+    transition:transform .12s linear; }
+  #timer { position:absolute; top:52px; left:0; right:0; text-align:center; font-size:62px;
+    font-weight:900; letter-spacing:2px; text-shadow:0 3px 18px #000; font-variant-numeric:tabular-nums; }
+  #timer.warn { color:var(--bad); animation:pulseT .5s ease-in-out infinite; }
+  @keyframes pulseT { 50% { transform:scale(1.14); } }
+  #diffTag { position:absolute; top:126px; left:0; right:0; text-align:center; font-size:13px;
+    font-weight:800; letter-spacing:3px; opacity:.7; text-shadow:0 2px 8px #000; color:var(--accent); }
+  #verdict .pts { font-size:34px; margin-top:2px; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -98,12 +112,15 @@
   <div id="flash"></div>
 
   <div id="hud" class="hidden">
+    <div id="timeBar"></div>
     <div id="beat"></div>
     <div class="topbar">
       <div class="stat" id="score"><small>SCORE</small><b>0</b></div>
       <div class="stat" id="combo"><small>COMBO</small><b>0</b></div>
-      <div class="stat" id="hits"><small>FITS</small><b>0/0</b></div>
+      <div class="stat" id="hits"><small>FITS</small><b>0</b></div>
     </div>
+    <div id="timer">25</div>
+    <div id="diffTag"></div>
     <div id="poseName">GET READY</div>
     <div id="verdict"></div>
     <div id="meterWrap">
@@ -123,9 +140,8 @@
         <input type="range" id="bpm" min="60" max="140" value="95" /></label>
       <label class="ctl">BEATS / POSE <span id="holdVal">4</span>
         <input type="range" id="hold" min="2" max="6" value="4" /></label>
-      <label class="ctl">POSES / ROUND <span id="roundVal">16</span>
-        <input type="range" id="round" min="8" max="32" step="4" value="16" /></label>
     </div>
+    <div id="diffNote">25-second rounds · score <b id="diffReadout">×1.00</b> — faster tempo &amp; fewer beats/pose = harder = more points</div>
     <button id="startBtn">START</button>
     <label class="file">▸ optional: play your own track
       <input type="file" id="music" accept="audio/*" /></label>
@@ -164,14 +180,20 @@ const bpmVal = document.getElementById('bpmVal');
 const holdVal = document.getElementById('holdVal');
 const musicInput = document.getElementById('music');
 const playerInput = document.getElementById('player');
-const roundSlider = document.getElementById('round');
-const roundVal = document.getElementById('roundVal');
 const lbList = document.getElementById('lbList');
 const resultEl = document.getElementById('result');
+const timerEl = document.getElementById('timer');
+const timeBar = document.getElementById('timeBar');
+const diffTag = document.getElementById('diffTag');
+const diffReadout = document.getElementById('diffReadout');
 
-bpmSlider.oninput = () => bpmVal.textContent = bpmSlider.value + ' BPM';
-holdSlider.oninput = () => holdVal.textContent = holdSlider.value;
-roundSlider.oninput = () => roundVal.textContent = roundSlider.value;
+// difficulty multiplier: faster tempo + fewer beats per pose = harder = more points
+function difficulty(bpm,hold){ return (bpm/95) * (4/hold); }
+function updateDiff(){ diffReadout.textContent = '×'+difficulty(Number(bpmSlider.value),Number(holdSlider.value)).toFixed(2); }
+
+bpmSlider.oninput = () => { bpmVal.textContent = bpmSlider.value + ' BPM'; updateDiff(); };
+holdSlider.oninput = () => { holdVal.textContent = holdSlider.value; updateDiff(); };
+updateDiff();
 playerInput.value = (localStorage.getItem('chino_name') || '').slice(0,12);
 
 /* ---------- pose templates (UPPER BODY only) ----------
@@ -286,9 +308,10 @@ async function submitScore(){
 }
 
 /* ---------- game state ---------- */
-let running=false, startTime=0, secPerBeat=0.6, holdBeats=4, roundTarget=16;
+const GAME_SECONDS=25;
+let running=false, startTime=0, secPerBeat=0.6, holdBeats=4, diffMult=1, ended=false;
 let lastBeat=-1, current=null, liveScore=0;
-let score=0, combo=0, fits=0, total=0;
+let score=0, combo=0, fits=0, total=0, accSum=0;
 
 function spawnTarget(beat){
   let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
@@ -306,43 +329,52 @@ function onBeat(beat){
   beatDot.style.opacity=1; beatDot.style.transform='translateX(-50%) scale(1.6)';
   setTimeout(()=>{ beatDot.style.opacity=.25; beatDot.style.transform='translateX(-50%) scale(1)'; },110);
 
-  if(!current){ if(beat>=2) spawnTarget(beat); return; }
+  if(!current){ if(beat>=1) spawnTarget(beat); return; }
 
   // judge when the wall arrives
   if(!current.judged && beat >= current.startBeat + holdBeats){
     current.judged = true;
-    const pct = Math.round(liveScore*100);
-    const ok = liveScore >= 0.55;
-    total++;
-    if(ok){ fits++; combo++; score += 100 + Math.round(liveScore*100) + combo*10; }
-    else { combo=0; }
-    showVerdict(ok, pct);
+    const acc = liveScore;                 // 0..1 accuracy at the moment of impact
+    const pct = Math.round(acc*100);
+    const ok = acc >= 0.55;
+    total++; accSum += acc;
+    let gained = 0, tier = 'MISS';
+    if(ok){
+      fits++; combo++;
+      const q = Math.min(1, (acc-0.5)/0.5);              // accuracy quality 0..1
+      tier = acc>=0.9 ? 'PERFECT' : acc>=0.75 ? 'GREAT' : 'GOOD';
+      gained = Math.round((60 + 240*q*q) * diffMult) + (combo-1)*15; // accuracy^2 + difficulty + combo
+      score += gained;
+    } else { combo=0; }
+    showVerdict(ok, tier, pct, gained);
     sfx(ok);
-    scoreB.textContent=score; comboB.textContent=combo; hitsB.textContent=fits+'/'+total;
-    if(total >= roundTarget) endRound(); else spawnTarget(beat); // next wall on the beat
+    scoreB.textContent=score; comboB.textContent=combo; hitsB.textContent=fits;
+    spawnTarget(beat); // keep going — the timer ends the round
   }
 }
 
 async function endRound(){
   running=false; current=null; liveScore=0;
   if(songSource){ try{ songSource.stop(); }catch(e){} songSource=null; }
-  const acc = total? Math.round(fits/total*100):0;
+  const avgAcc = total? Math.round(accSum/total*100):0;
   hud.classList.add('hidden'); menu.classList.remove('hidden');
   startBtn.textContent='PLAY AGAIN';
   resultEl.classList.remove('hidden');
-  resultEl.innerHTML = `ROUND OVER<br><span class="big">${score}</span><br>${fits}/${total} fits · ${acc}% · submitting…`;
+  const line = `${fits}/${total} fits · ${avgAcc}% avg · diff ×${diffMult.toFixed(2)}`;
+  resultEl.innerHTML = `TIME!<br><span class="big">${score}</span><br>${line} · submitting…`;
   const res = await submitScore();
-  resultEl.innerHTML = `ROUND OVER<br><span class="big">${score}</span><br>${fits}/${total} fits · ${acc}%` +
+  resultEl.innerHTML = `TIME!<br><span class="big">${score}</span><br>${line}` +
     (res && res.rank ? ` · <b style="color:#ffd23f">rank #${res.rank}</b> of ${res.players}`
                      : ` · <span style="opacity:.6">(leaderboard offline)</span>`);
   loadLeaderboard();
 }
 
-function showVerdict(ok,pct){
-  verdictEl.textContent = (ok?'FIT! ':'MISS ')+pct+'%';
-  verdictEl.style.color = ok? 'var(--good)':'var(--bad)';
+function showVerdict(ok,tier,pct,gained){
+  const col = !ok ? 'var(--bad)' : tier==='PERFECT' ? '#c084fc' : tier==='GREAT' ? '#33ff99' : '#ffd23f';
+  verdictEl.innerHTML = ok ? `${tier} ${pct}%<div class="pts">+${gained}</div>` : `MISS ${pct}%`;
+  verdictEl.style.color = col;
   verdictEl.classList.add('show');
-  flash.style.opacity = ok?0.5:0.25; flash.style.background = ok?'#33ff99':'#ff3366';
+  flash.style.opacity = ok?0.5:0.25; flash.style.background = ok? (tier==='PERFECT'?'#c084fc':'#33ff99') : '#ff3366';
   setTimeout(()=>{ verdictEl.classList.remove('show'); flash.style.opacity=0; }, 520);
 }
 
@@ -430,6 +462,13 @@ function loop(){
   const b=Math.floor(beatF);
   while(b>lastBeat){ lastBeat++; onBeat(lastBeat); }
 
+  // game timer (25s)
+  const left = Math.max(0, GAME_SECONDS - (actx.currentTime - startTime));
+  timerEl.textContent = Math.ceil(left);
+  timerEl.classList.toggle('warn', left<=5 && left>0);
+  timeBar.style.transform = 'scaleX('+(left/GAME_SECONDS)+')';
+  if(left<=0 && !ended){ ended=true; endRound(); return; }
+
   // score + draw
   const frame = lm? shoulderFrame(lm,W,H):null;
   if(current){ liveScore = matchScore(frame,current.pose);
@@ -463,9 +502,11 @@ startBtn.onclick = async () => {
   view.width=view.clientWidth; view.height=view.clientHeight;
   secPerBeat = 60/Number(bpmSlider.value);
   holdBeats = Number(holdSlider.value);
-  roundTarget = Number(roundSlider.value);
-  score=0; combo=0; fits=0; total=0; lastBeat=-1; current=null; liveScore=0;
-  scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0/'+roundTarget;
+  diffMult = difficulty(Number(bpmSlider.value), Number(holdSlider.value));
+  score=0; combo=0; fits=0; total=0; accSum=0; lastBeat=-1; current=null; liveScore=0; ended=false;
+  scoreB.textContent=0; comboB.textContent=0; hitsB.textContent='0';
+  diffTag.textContent='DIFFICULTY ×'+diffMult.toFixed(2);
+  timerEl.textContent=GAME_SECONDS; timerEl.classList.remove('warn'); timeBar.style.transform='scaleX(1)';
 
   resultEl.classList.add('hidden');
   menu.classList.add('hidden'); hud.classList.remove('hidden');
