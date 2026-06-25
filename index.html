@@ -49,9 +49,7 @@
   #menu { position:absolute; inset:0; background:radial-gradient(circle at 50% 35%,#101637,#05060f 70%);
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:18px; pointer-events:auto; text-align:center; padding:24px; }
-  #menu h1 { font-size:clamp(40px,9vw,84px); letter-spacing:6px; font-weight:900;
-    background:linear-gradient(90deg,var(--accent),#a855f7,#ffd23f);
-    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #logo { width:min(78vw,440px); height:auto; filter:drop-shadow(0 8px 40px rgba(255,0,128,.35)); }
   #menu p { max-width:520px; opacity:.8; line-height:1.5; font-size:15px; }
   .controls { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:center;
     margin-top:6px; }
@@ -89,7 +87,7 @@
   </div>
 
   <div id="menu">
-    <h1>CHINOKABE</h1>
+    <img id="logo" src="logo.webp" alt="CHINOKABE — Beat the Wall" />
     <p>The wall is coming. Strike the pose before it hits the beat.
        Stand back so your whole upper body is in frame. The AI judges your fit.</p>
     <div class="controls">
