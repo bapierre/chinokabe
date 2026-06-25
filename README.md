@@ -56,19 +56,24 @@ Then in the Cloudflare dashboard → **Pages → chinokabe → Settings**:
 
 ### Connect chinokabe.com
 
-The domain must be a **zone on this same Cloudflare account** (so Pages can manage the
-apex record):
+`chinokabe.com` was bought via **Cloudflare Registrar** on the team account, so it's
+already an active zone — **no nameserver step**. Just make sure the Pages project lives
+in that same account, then attach the domain:
 
-1. Cloudflare dashboard → **Add a site** → `chinokabe.com` → it shows two nameservers.
-2. At your registrar, set the domain's **nameservers** to those two. Wait for it to go
-   "Active" (minutes to a few hours).
-3. **Pages → chinokabe → Custom domains → Set up a domain** → add `chinokabe.com`
-   **and** `www.chinokabe.com`. Cloudflare creates the records and TLS cert automatically.
-4. Optional: a redirect rule `www.chinokabe.com/*` → `https://chinokabe.com/$1` (or vice
-   versa) so there's one canonical host.
+1. **Deploy into the account that owns chinokabe.com.** If `npx wrangler whoami` lists
+   more than one account, set its id in `wrangler.toml` (`account_id = "..."`) or export
+   `CLOUDFLARE_ACCOUNT_ID` before deploying.
+2. **Pages → chinokabe → Custom domains → Set up a domain** → add `chinokabe.com`
+   **and** `www.chinokabe.com`. Because the zone is already active, this is instant —
+   Cloudflare creates the DNS records and TLS cert automatically.
+3. Optional: a redirect rule `www.chinokabe.com/*` → `https://chinokabe.com/$1` for one
+   canonical host.
 
-HTTPS is automatic — no cert work. After this, the game + leaderboard are live at
-`https://chinokabe.com`, including the camera (secure context) and `/api/scores`.
+> Creating Pages projects + D1 needs **account-level** admin. If you only have
+> domain-scoped access, your teammate either grants account admin or runs the deploy.
+
+HTTPS is automatic. After this the game + leaderboard are live at `https://chinokabe.com`,
+including the camera (secure context) and `/api/scores`.
 
 ### Recommended: auto-deploy from GitHub
 In the dashboard, **Pages → Create → Connect to Git → `bapierre/chinokabe`**. Every

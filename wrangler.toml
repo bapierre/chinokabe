@@ -2,6 +2,10 @@ name = "chinokabe"
 compatibility_date = "2025-06-01"
 pages_build_output_dir = "."
 
+# Deploy into the Cloudflare account that owns chinokabe.com (the team account).
+# If `wrangler whoami` lists more than one account, uncomment and set this:
+# account_id = "REPLACE_WITH_TEAM_ACCOUNT_ID"
+
 # D1 leaderboard database.
 # After `wrangler d1 create chinokabe-scores`, paste the printed database_id below.
 [[d1_databases]]
