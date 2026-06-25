@@ -103,6 +103,13 @@
   .multbox > span { font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.6); }
   .multbox b { font-size:22px; font-weight:700; color:var(--gold); letter-spacing:1px; margin-left:auto; }
   .multbox small { flex-basis:100%; font-size:10px; letter-spacing:.5px; color:rgba(255,255,255,.38); }
+  .modeseg { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:5px;
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:12px; margin-bottom:8px; }
+  .modeseg .seg { background:transparent; color:rgba(255,255,255,.55); box-shadow:none; border:none;
+    padding:11px 8px; border-radius:8px; font-family:inherit; font-size:12px; font-weight:600;
+    letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; transition:all .12s; }
+  .modeseg .seg.active { background:linear-gradient(90deg,var(--magenta),var(--accent)); color:#05060f; }
+  .modehint { font-size:11px; letter-spacing:.5px; color:rgba(255,255,255,.45); margin-bottom:16px; min-height:14px; }
 
   /* leaderboard panel */
   #boardList { list-style:none; max-height:clamp(200px,36vh,340px); overflow-y:auto;
@@ -168,12 +175,17 @@
   <div id="menu">
     <div class="panels-shell">
       <img id="logo" src="logo.webp" alt="CHINOKABE — Beat the Wall" />
-      <p class="tagline">The wall is coming. Strike the pose before it hits the beat.
-        Stand back so your upper body fills the frame — the AI judges your fit.</p>
+      <p class="tagline">The wall is coming. Strike the pose before it hits the beat —
+        the AI judges your fit. Pick a mode, then go.</p>
       <button id="startBtn" class="cta">Start</button>
       <div class="panels">
         <section class="panel">
           <div class="panel-head"><h2>Settings</h2></div>
+          <div class="modeseg" id="modeSeg">
+            <button class="seg active" data-mode="upper" type="button">Upper body</button>
+            <button class="seg" data-mode="full" type="button">Full body</button>
+          </div>
+          <p class="modehint" id="modeHint">Sit or stand close — arms &amp; torso only.</p>
           <label class="ctl">
             <span class="row"><span>TEMPO</span><span class="val" id="bpmVal">95 BPM</span></span>
             <input type="range" id="bpm" min="60" max="140" value="95" />
@@ -244,6 +256,17 @@ bpmSlider.oninput = () => { bpmVal.textContent = bpmSlider.value + ' BPM'; updat
 holdSlider.oninput = () => { holdVal.textContent = holdSlider.value; updateMult(); };
 updateMult();
 
+// mode selector (upper / full body)
+const modeHint = document.getElementById('modeHint');
+const MODE_HINTS = { upper:'Sit or stand close — arms & torso only.',
+                     full:'Stand back ~2–3m so your whole body is in frame.' };
+document.getElementById('modeSeg').addEventListener('click', e => {
+  const btn = e.target.closest('.seg'); if(!btn) return;
+  mode = btn.dataset.mode;
+  document.querySelectorAll('#modeSeg .seg').forEach(s => s.classList.toggle('active', s===btn));
+  modeHint.textContent = MODE_HINTS[mode];
+});
+
 /* ---------- pose templates (UPPER BODY only) ----------
    Units = shoulder width. Origin = midpoint of shoulders. +x right, -y up.
    Each shoulder sits at x=±0.5,y=0. shoulder→elbow ≈0.75, shoulder→wrist ≈1.5.
@@ -260,6 +283,16 @@ const POSES = [
   { name:'ARMS DOWN',  le:[-0.72,0.72], re:[0.72,0.72], lw:[-0.94,1.44], rw:[0.94,1.44] },
   { name:'DIAGONAL ↗', le:[-1.02,0.53], re:[1.03,-0.53],lw:[-1.55,1.06], rw:[1.56,-1.06] },
   { name:'DIAGONAL ↖', le:[-1.03,-0.53],re:[1.02,0.53], lw:[-1.56,-1.06],rw:[1.55,1.06] },
+];
+// Full-body poses add knees (lk/rk) and ankles (la/ra), same shoulder-width units.
+// Hips sit ~1.35 below shoulders; rest knees ~2.4, ankles ~3.4.
+const POSES_FULL = [
+  { name:'STAR JUMP',  le:[-1.25,-0.4],re:[1.25,-0.4],lw:[-2.0,-0.9],rw:[2.0,-0.9], lk:[-0.9,2.4],rk:[0.9,2.4], la:[-1.4,3.3],ra:[1.4,3.3] },
+  { name:'T STANCE',   le:[-1.25,0],   re:[1.25,0],   lw:[-2.0,0],   rw:[2.0,0],    lk:[-0.35,2.4],rk:[0.35,2.4], la:[-0.35,3.4],ra:[0.35,3.4] },
+  { name:'LEFT KICK',  le:[-0.6,0.6],  re:[0.6,0.6],  lw:[-0.9,1.3], rw:[0.9,1.3],  lk:[-1.1,1.9],rk:[0.35,2.4], la:[-1.7,1.4],ra:[0.35,3.4] },
+  { name:'RIGHT KICK', le:[-0.6,0.6],  re:[0.6,0.6],  lw:[-0.9,1.3], rw:[0.9,1.3],  lk:[-0.35,2.4],rk:[1.1,1.9], la:[-0.35,3.4],ra:[1.7,1.4] },
+  { name:'LUNGE',      le:[-1.25,0],   re:[1.25,0],   lw:[-1.6,-0.6],rw:[1.6,-0.6], lk:[-1.1,2.3],rk:[0.7,2.6], la:[-1.6,3.3],ra:[0.9,3.4] },
+  { name:'REACH UP',   le:[-0.5,-0.75],re:[0.5,-0.75],lw:[-0.5,-1.5],rw:[0.5,-1.5], lk:[-0.35,2.4],rk:[0.35,2.4], la:[-0.35,3.4],ra:[0.35,3.4] },
 ];
 
 /* ---------- pose landmarker ---------- */
@@ -323,9 +356,12 @@ let lastBeat=-1, current=null, liveScore=0;
 let score=0, combo=0, fits=0, total=0;
 const MAX_POSES=10; // fixed-length run so there's a score to record
 let scoreMult=1;    // pace multiplier captured at run start
+let mode='upper';   // 'upper' or 'full' (selected on the menu)
+function activePoses(){ return mode==='full' ? POSES_FULL : POSES; }
 
 function spawnTarget(beat){
-  let p; do { p = POSES[Math.floor(rand()*POSES.length)]; } while(current && p.name===current.pose.name && POSES.length>1);
+  const set = activePoses();
+  let p; do { p = set[Math.floor(rand()*set.length)]; } while(current && p.name===current.pose.name && set.length>1);
   current = { pose:p, startBeat:beat, judged:false };
   poseNameEl.textContent = p.name;
 }
@@ -397,7 +433,7 @@ function toMenu(){
   statusEl.textContent = landmarker? 'AI ready ✓ — press START' : 'Loading AI pose model…';
 }
 saveScoreBtn.onclick=()=>{ const name=(nameInput.value.trim()||'ANON').slice(0,12);
-  saveScore({name,score,fits,total,ts:Date.now()}); toMenu(); };
+  saveScore({name,score,fits,total,mode,ts:Date.now()}); toMenu(); };
 againBtn.onclick=()=>toMenu();
 renderBoard();
 
@@ -426,10 +462,16 @@ function smoothCredit(d){ // shoulder-width units: 0→1, >=1.6→0
 }
 function matchScore(frame,pose){
   if(!frame) return 0;
-  // wrists weight 0.7, elbows 0.3 (left=15/13, right=16/14)
+  // wrists weight high, elbows lower (left=15/13, right=16/14)
   const lw=frame.norm(15), rw=frame.norm(16), le=frame.norm(13), re=frame.norm(14);
   const sw = (smoothCredit(dist(lw,pose.lw)) + smoothCredit(dist(rw,pose.rw)))/2;
   const se = (smoothCredit(dist(le,pose.le)) + smoothCredit(dist(re,pose.re)))/2;
+  if(pose.la){ // full body: also score ankles (27/28) and knees (25/26)
+    const la=frame.norm(27), ra=frame.norm(28), lk=frame.norm(25), rk=frame.norm(26);
+    const sa = (smoothCredit(dist(la,pose.la)) + smoothCredit(dist(ra,pose.ra)))/2;
+    const sk = (smoothCredit(dist(lk,pose.lk)) + smoothCredit(dist(rk,pose.rk)))/2;
+    return sw*0.35 + se*0.15 + sa*0.35 + sk*0.15;
+  }
   return sw*0.7 + se*0.3;
 }
 
@@ -440,20 +482,25 @@ function drawVideo(W,H){
   ctx.fillStyle='rgba(5,6,15,0.30)'; ctx.fillRect(0,0,W,H); // darken for contrast
 }
 function P(i,lm,W,H){ return [ (1-lm[i].x)*W, lm[i].y*H ]; }
-const BONES=[[11,13],[13,15],[12,14],[14,16],[11,12]]; // upper body only
-function drawPlayer(lm,W,H,col){
+const BONES=[[11,13],[13,15],[12,14],[14,16],[11,12]]; // upper body
+const BONES_LEGS=[[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]]; // torso + legs
+function drawPlayer(lm,W,H,col,full){
+  const bones = full ? BONES.concat(BONES_LEGS) : BONES;
+  const joints = full ? [15,16,13,14,11,12,23,24,25,26,27,28] : [15,16,13,14,11,12];
   ctx.lineWidth=Math.max(4,W*0.006); ctx.strokeStyle=col; ctx.lineCap='round';
   ctx.shadowColor=col; ctx.shadowBlur=14;
-  for(const [a,b] of BONES){ const pa=P(a,lm,W,H),pb=P(b,lm,W,H);
+  for(const [a,b] of bones){ const pa=P(a,lm,W,H),pb=P(b,lm,W,H);
     ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke(); }
   ctx.shadowBlur=0;
-  for(const i of [15,16,13,14,11,12]){ const p=P(i,lm,W,H);
+  for(const i of joints){ const p=P(i,lm,W,H);
     ctx.beginPath(); ctx.arc(p[0],p[1],W*0.012,0,7); ctx.fillStyle=col; ctx.fill(); }
 }
 // draw the incoming "wall" pose ghost (upper body only)
 function drawGhost(pose,approach,W,H,grade){
-  const cx=W/2, cy=H*0.46;
-  const scale = (H*0.20) * (0.45 + 0.55*approach); // 1 unit = shoulder width; grows as it nears
+  const full = !!pose.la;
+  const cx=W/2, cy= full ? H*0.30 : H*0.46;          // full body sits higher to fit legs
+  const base = full ? H*0.11 : H*0.20;               // smaller unit so legs fit on screen
+  const scale = base * (0.45 + 0.55*approach);       // grows as the wall nears
   const alpha = 0.25 + 0.65*approach;
   const sp=([x,y])=>[ cx + x*scale, cy + y*scale ];
   const G={ ls:sp(FIX.ls),rs:sp(FIX.rs),head:sp(FIX.head),hl:sp(FIX.hl),hr:sp(FIX.hr),
@@ -464,9 +511,14 @@ function drawGhost(pose,approach,W,H,grade){
   ctx.strokeStyle=col; ctx.shadowColor=col; ctx.shadowBlur=24;
   const link=(a,b)=>{ctx.beginPath();ctx.moveTo(G[a][0],G[a][1]);ctx.lineTo(G[b][0],G[b][1]);ctx.stroke();};
   link('ls','rs');                       // shoulders
-  link('ls','hl'); link('rs','hr'); link('hl','hr'); // short torso
+  link('ls','hl'); link('rs','hr'); link('hl','hr'); // torso
   link('ls','le'); link('le','lw');      // left arm
   link('rs','re'); link('re','rw');      // right arm
+  if(full){
+    G.lk=sp(pose.lk); G.rk=sp(pose.rk); G.la=sp(pose.la); G.ra=sp(pose.ra);
+    link('hl','lk'); link('lk','la');    // left leg
+    link('hr','rk'); link('rk','ra');    // right leg
+  }
   ctx.beginPath(); ctx.arc(G.head[0],G.head[1],scale*0.5,0,7); ctx.stroke(); // head
   ctx.restore();
 }
@@ -500,7 +552,7 @@ function loop(){
     drawGhost(current.pose, approach, W, H, liveScore);
   }
   if(lm){ const ok=liveScore>=0.55;
-    drawPlayer(lm,W,H, current? (ok?'#33ff99':(liveScore>=0.3?'#ffd23f':'#ff5d8f')):'#9ad'); }
+    drawPlayer(lm,W,H, current? (ok?'#33ff99':(liveScore>=0.3?'#ffd23f':'#ff5d8f')):'#9ad', mode==='full'); }
 
   // meter
   const pct=Math.round(liveScore*100);
